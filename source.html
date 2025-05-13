@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Vortex</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #canvas-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            position: relative;
+        }
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+            text-align: center;
+            width: 100%;
+            pointer-events: none;
+        }
+    </style>
+
+<base target="_self">
+
+
+    <div id="canvas-container">
+        <div class="instructions">Move mouse to orbit the vortex | Click to intensify the effect</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.8.0/lib/p5.js"></script>
+    <script>
+        const sketch = (p) => {
+            let particles = [];
+            let blackHole;
+            let rotationAngle = 0;
+            let distortionStrength = 0;
+            let targetDistortion = 0;
+            let glowIntensity = 0;
+            let targetGlow = 0;
+            let lastMouseX = 0;
+            let lastMouseY = 0;
+            let mouseVelocity = p.createVector(0, 0);
+            let bgGradient;
+
+            p.setup = () => {
+                let canvas = p.createCanvas(p.min(p.windowWidth, 1200), p.min(p.windowHeight, 800), p.WEBGL);
+                canvas.parent('canvas-container');
+                p.colorMode(p.HSB, 360, 100, 100, 1);
+                
+                // Create black hole
+                blackHole = {
+                    position: p.createVector(0, 0, 0),
+                    radius: 50,
+                    eventHorizon: 80,
+                    accretionDiskRadius: 300
+                };
+
+                // Create accretion disk particles
+                for (let i = 0; i < 800; i++) {
+                    let angle = p.random(p.TWO_PI);
+                    let distance = p.random(blackHole.eventHorizon + 10, blackHole.accretionDiskRadius);
+                    let z = p.random(-20, 20);
+                    
+                    particles.push({
+                        position: p.createVector(
+                            p.cos(angle) * distance,
+                            p.sin(angle) * distance,
+                            z
+                        ),
+                        velocity: p.createVector(
+                            p.cos(angle + p.HALF_PI) * p.map(distance, blackHole.eventHorizon, blackHole.accretionDiskRadius, 2, 0.5),
+                            p.sin(angle + p.HALF_PI) * p.map(distance, blackHole.eventHorizon, blackHole.accretionDiskRadius, 2, 0.5),
+                            0
+                        ),
+                        size: p.random(1, 3),
+                        hue: p.map(distance, blackHole.eventHorizon, blackHole.accretionDiskRadius, 0, 60),
+                        brightness: p.map(distance, blackHole.eventHorizon, blackHole.accretionDiskRadius, 100, 60),
+                        distance: distance,
+                        angle: angle
+                    });
+                }
+
+                // Create background gradient
+                bgGradient = p.createGraphics(p.width, p.height);
+                for (let y = 0; y < p.height; y++) {
+                    let inter = p.map(y, 0, p.height, 0, 1);
+                    let c = p.lerpColor(p.color(0, 0, 10), p.color(230, 100, 5), inter);
+                    bgGradient.stroke(c);
+                    bgGradient.line(0, y, p.width, y);
+                }
+            };
+
+            p.draw = () => {
+                // Update effects based on mouse interaction
+                updateEffects();
+                
+                // Clear with black background
+                p.background(0);
+                
+                // Apply gravitational lensing effect
+                applyLensingEffect();
+                
+                // Draw the black hole system
+                drawBlackHoleSystem();
+                
+                // Update rotation based on mouse movement
+                updateRotation();
+            };
+
+            function updateEffects() {
+                // Smoothly adjust distortion based on target
+                distortionStrength = p.lerp(distortionStrength, targetDistortion, 0.05);
+                glowIntensity = p.lerp(glowIntensity, targetGlow, 0.05);
+                
+                // Calculate mouse velocity for rotation
+                mouseVelocity.x = (p.mouseX - lastMouseX) * 0.01;
+                mouseVelocity.y = (p.mouseY - lastMouseY) * 0.01;
+                lastMouseX = p.mouseX;
+                lastMouseY = p.mouseY;
+            }
+
+            function applyLensingEffect() {
+                // This is a simplified lensing effect - in a real implementation you'd use shaders
+                p.push();
+                p.translate(0, 0, -500);
+                p.texture(bgGradient);
+                p.plane(p.width * 2, p.height * 2);
+                p.pop();
+            }
+
+            function drawBlackHoleSystem() {
+                p.push();
+                
+                // Rotate the entire system
+                p.rotateX(rotationAngle * 0.2);
+                p.rotateY(rotationAngle * 0.3);
+                
+                // Draw accretion disk
+                drawAccretionDisk();
+                
+                // Draw black hole
+                drawBlackHole();
+                
+                // Draw gravitational distortion
+                drawDistortionField();
+                
+                p.pop();
+            }
+
+            function drawAccretionDisk() {
+                p.push();
+                p.noStroke();
+                
+                // Update and draw particles
+                for (let particle of particles) {
+                    // Apply gravitational pull
+                    let gravity = p5.Vector.sub(blackHole.position, particle.position);
+                    let distance = gravity.mag();
+                    gravity.normalize();
+                    gravity.mult(p.map(distance, blackHole.eventHorizon, blackHole.accretionDiskRadius, 5, 0.1));
+                    particle.velocity.add(gravity);
+                    
+                    // Update position
+                    particle.position.add(particle.velocity);
+                    
+                    // Keep particles in disk
+                    if (distance < blackHole.eventHorizon + 10) {
+                        particle.velocity.mult(-0.5);
+                    } else if (distance > blackHole.accretionDiskRadius) {
+                        let dir = p5.Vector.sub(particle.position, blackHole.position);
+                        dir.normalize();
+                        dir.mult(blackHole.accretionDiskRadius * 0.9);
+                        particle.position = p5.Vector.add(blackHole.position, dir);
+                        particle.velocity.mult(0.8);
+                    }
+                    
+                    // Draw particle with Doppler effect
+                    let velocityTowardCamera = particle.velocity.z;
+                    let hueShift = p.map(velocityTowardCamera, -1, 1, -20, 20);
+                    let brightness = p.map(velocityTowardCamera, -1, 1, 80, 40);
+                    
+                    p.push();
+                    p.translate(particle.position.x, particle.position.y, particle.position.z);
+                    p.fill((particle.hue + hueShift) % 360, 100, brightness, 0.8);
+                    p.sphere(particle.size * (1 + glowIntensity * 0.5));
+                    p.pop();
+                }
+                
+                p.pop();
+            }
+
+            function drawBlackHole() {
+                p.push();
+                p.translate(blackHole.position.x, blackHole.position.y, blackHole.position.z);
+                
+                // Event horizon
+                p.fill(0, 0, 0);
+                p.sphere(blackHole.eventHorizon);
+                
+                // Glowing edge
+                p.fill(60, 100, 100, 0.1 * glowIntensity);
+                p.sphere(blackHole.eventHorizon * 1.2);
+                
+                // Singularity glow
+                p.fill(30, 100, 100, 0.05 * glowIntensity);
+                p.sphere(blackHole.eventHorizon * 0.5);
+                
+                p.pop();
+            }
+
+            function drawDistortionField() {
+                // Simplified distortion effect - would be better with shaders
+                p.push();
+                p.translate(blackHole.position.x, blackHole.position.y, blackHole.position.z);
+                
+                for (let i = 0; i < 20; i++) {
+                    let radius = p.map(i, 0, 20, blackHole.eventHorizon * 1.5, blackHole.accretionDiskRadius * 1.2);
+                    let alpha = p.map(i, 0, 20, 0.3, 0.05) * distortionStrength;
+                    
+                    p.push();
+                    p.rotateX(p.frameCount * 0.01);
+                    p.rotateY(p.frameCount * 0.015);
+                    p.noFill();
+                    p.stroke(200, 100, 100, alpha);
+                    p.strokeWeight(1);
+                    p.sphere(radius);
+                    p.pop();
+                }
+                
+                p.pop();
+            }
+
+            function updateRotation() {
+                // Smooth rotation based on mouse movement
+                rotationAngle += mouseVelocity.x * 0.1;
+                
+                // Add subtle automatic rotation
+                rotationAngle += 0.002;
+            }
+
+            p.mouseMoved = () => {
+                // Increase distortion when mouse moves fast
+                let speed = p.dist(p.mouseX, p.mouseY, p.pmouseX, p.pmouseY);
+                targetDistortion = p.constrain(speed * 0.02, 0, 1);
+            };
+
+            p.mouseClicked = () => {
+                // Intensify the glow effect on click
+                targetGlow = targetGlow > 0 ? 0 : 1;
+            };
+
+            p.windowResized = () => {
+                p.resizeCanvas(p.min(p.windowWidth, 1200), p.min(p.windowHeight, 800));
+                
+                // Recreate background gradient
+                bgGradient = p.createGraphics(p.width, p.height);
+                for (let y = 0; y < p.height; y++) {
+                    let inter = p.map(y, 0, p.height, 0, 1);
+                    let c = p.lerpColor(p.color(0, 0, 10), p.color(230, 100, 5), inter);
+                    bgGradient.stroke(c);
+                    bgGradient.line(0, y, p.width, y);
+                }
+            };
+        };
+
+        new p5(sketch);
+    </script>
+
+              
+          
+                
+          
+              
